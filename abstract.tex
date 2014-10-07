@@ -1,0 +1,26 @@
+\begin{abstract} 
+
+Phase Change Memory (PCM) is an upcoming \emph{nonvolatile} memory
+technology that is comparable to traditional DRAM with regard to read
+latency, and markedly superior with regard to storage density and 
+idle power consumption. Due to these desirable characteristics, PCM is expected
+to play a significant role in the next generation of computing systems.
+However, it also has limitations in the form of expensive writes and
+limited write endurance. Correspondingly, there has been recent research
+investigating how database engines may be redesigned to suit
+DBMS deployments on the new technology.
+
+In this paper, we propose the design of PCM-conscious
+database operators for the model of PCM deployment in which PCM augmented with a small DRAM buffer acts as the main memory.  Specifically,
+we propose novel implementations of the ``workhorse" database operators:
+\textit{sort}, \textit{hash join} and \textit{group-by} that reduce both writes as well as query response times. We also provide
+estimators of the writes incurred by these techniques. 
+
+Then, we
+incorporate the proposed techniques in a state-of-the-art architectural
+simulator and assess their performance on TPC-H benchmark queries. The estimators are validated against the actual writes obtained during experiments.
+The experimental results suggest that their collective impact can increase
+the PCM lifetime by upto four times while simultaneously improving the
+query response times. In essence, our algorithms provide both short term and long term improvements. These outcomes augur well for database engines
+that wish to leverage the impending transition to PCM-based computing.
+\end{abstract}

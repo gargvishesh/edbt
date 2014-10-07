@@ -1,0 +1,44 @@
+\section{Hash Join}
+\label{hj}
+
+Hash join is another workhorse operator in database systems used most frequently among all join operators. A hash table is built on the smaller relation and larger relation tuples are used to probe for matching value(s) in the join column(s)    .
+
+During the progress of hash join, writes are incurred during building of the hash table, besides during writing of the join results. We discuss the conventional hash table construction followed by our optimisations in the following subsections. We assume $size_{entry}$ as the hash table entry size for each smaller relation tuple. If $size_{hj}$ is the size of each output tuple, an output of $J$ join tuples would incur $J \times size_{hj}$ writes.
+
+\subsection{Conventional hash table}
+Each entry in a hash table consists of a pointer to the corresponding inner table tuple and the hash value for the join columns. To save memory space wastage, typically a separate entry sized space is allocated for each insertion in a bucket and connected to existing entries using an additional pointer. Such an approach incurs an additional pointer write each time a new entry is inserted.
+
+\textbf{PCM write analysis}: Each new entry connects to the previous entry in the bucket by means of a pointer. This would incur $P$ writes apart from $size_{entry}$ writes for each entry. Thus the total writes for conventional hash table is given by
+
+\begin{equation}\label{eq:ht_conv}
+  W_{ht\_conv} = N_R \times (size_{entry} + P) + J \times size_{hj}
+\end{equation}
+
+\subsection{Bitmapped page based allocation}
+Allocation of space to buckets is done in units of \textit{pages}. A page contains a set of contiguous entries and is connected to another page by means of a pointer. A bitmap is used to indicate whether each entry in the page is vacant or occupied. Each time a bucket runs out of space, we allocate a new page to the bucket. Though such an approach  may lead to space wastage when some of the pages are not fully occupied, we save on valuable pointer writes which are incurred when the space is allocated on a per-entry basis.
+
+\textbf{PCM write analysis}: Assuming there are $E_{page}$ entries per page, there would now be one pointer per $E_{page}$ entries. In such a case, the writes would be 
+$$W_{ht\_bitmapped} = N_R \times (size_{entry} + \frac{P}{E_{page}}) + J \times size_{hj}$$\\
+Since in practice $\dfrac{P}{E_{page}}$ is small, 
+\begin{equation}\label{eq:ht_bmp}
+ W_{ht\_bitmapped} \approx N_R \times size_{entry} + J \times size_{hj} 
+\end{equation} 
+
+
+\subsection{Varying hash value length}
+We can avoid including the hash value in each entry and incur the penalty of reading the join field for each entry in the bucket. Apart from reducing the writes, this approach will also save the write time at the cost of additional read time. Assuming $B$ buckets and a uniform hash table distribution, there would be $\frac{N_R}{B}$ entries in each bucket. Assuming $size_{hash\_value}$ as the size of the hash value in each entry (where $size_{hash\_value} < size_{entry}$), the time incurred for writing the hash values will be $t_w \times size_{hash\_value}$. For each $S$ tuple, due to the absence of hash value field, we would need to read the join column value from PCM taking a time of $\frac{N_R}{B} \times t_r$. Hence, skipping to include the hash value field will be advantageous in terms of time as well if:
+$$N_S \times \dfrac{N_R}{B} \times  t_r \leq  t_w \times size_{hash\_value} \times N_R $$
+$$\implies N_S \times \dfrac{N_R}{B} \times  t_r \leq \lambda t_r \times size_{hash\_value} \times N_R $$
+\begin{equation}
+\implies  N_S \leq \lambda \times size_{hash\_value} \times B
+\end{equation}
+
+When the above equation doesn't hold, an alternative is to store a single byte as hash value. If the hash function distributes the values in each bucket in a perfectly uniform manner, it would be able to distinguish between 256 join column values in a bucket. This would be sufficient if the number of distinct values mapping in each bucket is not larger than this value. Otherwise, we would have to incur the penalty (in terms of latency) of reading the actual join column(s) value(s) from PCM due to the possiblity of false positives.
+
+\textbf{PCM write analysis}: Let us assume the original hash value was 4 bytes long. Using a single byte hash value instead, combined with a bitmapped page based hash table would lead to a total writes of $W_{ht\_pcm}$ given by
+
+\begin{equation}\label{eq:ht_pcm}
+W_{ht\_pcm} = N_R \times (size_{entry} - 3)+ J \times size_{hj}
+\end{equation}
+	
+%A third approach takes the middle ground between cycles and writes. If we associate with each tuple pointer a 1 byte hash value, it will prevent fetching each inner relation tuple's join column value for each probe of outer relation. Assuming inner relation tuples are uniformly distributed and the hash function maintains this uniformity in hash values also, the chances of collision of hash values would be  $numtuples in a bucket/2^8 = numTuples/256 $. Then the number of PCM accesses required would be $numTuplesinBucket/256$. 

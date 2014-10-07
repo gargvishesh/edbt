@@ -1,0 +1,7 @@
+\section{Conclusion and Future Work}
+\label{conclusion}
+Database query execution algorithms on Phase Change Memory calls for a change in perspective from the conventional algorithm design assumption of symmetric reads and writes. We demonstrate that with carefully designed algorithms, we can leverage the favourable performance of PCM \textit{reads} to cut down on not only the \textit{writes} but the running time as well. 
+
+Even within the class of PCM conscious algorithms, there exist myriad algorithm design choices offering varying degrees of writes and running time. Nested loops join, as shown in Section \ref{tradeoff}, would incur the least amount of writes for join when both relations fit in PCM, but might prove to be extremely slow. Similarly, selection sort trades writes for extra read cycles as compared to multi-pivot quicksort. 
+
+We need to come up with metrics that can quantify this trade-off based upon some measure of the lifetime that the PCM memory module is expected to serve and the maximum delay the user is willing to bear. Secondly, these metrics need to be integrated with the query optimizer for it to choose suitable query execution plans for PCM based hardware. We see this as an interesting line of future work.

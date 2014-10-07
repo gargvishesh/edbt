@@ -1,0 +1,70 @@
+\section{Problem Framework}
+\label{assumptions}
+In this section, we overview the problem framework, the assumptions made
+in our analysis, and the notations used in the description.
+
+As mentioned before, we use the \model{} model (Figure \ref{fig:pcm_models} model (c)). The DRAM buffer organization is assumed to be $K$-way set associative. During a program run, three regions of memory are accessed --
+the code, the stack and the heap. These regions collectively share a common
+DRAM buffer. In our theoretical analysis, we assume that two of the $K$ associations are used by the
+code and the stack, leaving $K-2$ available for the heap structures.
+Therefore, given an overall DRAM size of $Size_{DRAM}$, the effective
+DRAM size, denoted by $D$, is reduced to $\frac{K-2}{K}
+\times Size_{DRAM}$.
+
+Another assumption is that there are no conflict misses in the DRAM. Thus,
+for any operations dealing with data whose size is within the DRAM
+capacity, there are no evictions and consequently no writes.
+
+We hasten to add that while the above assumptions are made for
+tractability in the theoretical analysis, the simulator used in the
+experiments described in Section~\ref{sec:exp} implements a \emph{realistic}
+cache without these assumptions.
+
+A \textit{data-comparison write (DCW)} scheme \cite{write} is assumed to
+be used for the writing of PCM memory blocks during eviction from DRAM. In this
+scheme, the memory controller compares the existing PCM block to the
+newly evicted DRAM block, and writes back only those words that have
+been modified.
+
+On a related note, we assume that \textit{N-Chance}~\cite{nchance} is
+used as the DRAM eviction policy.  In this scheme, the first clean
+way in the $N$ least recently used ways (assuming $N$ is less than $K$, 
+the DRAM cache associativity) in a set is chosen as the eviction victim. Only
+when all the $N$ ways are dirty, the LRU entry is evicted. We choose this
+scheme due to its preference for evicting non-dirty entries over dirty
+candidates, thereby saving on writes.
+
+For unary operators \textit{sort} and \textit{group-by}, $R$ is used to
+denote the input relation. Whereas, for the binary \textit{hash join} operator,
+$R$ is used to denote the smaller relation, on which the hash table is
+constructed, while  $S$ denotes the probing relation.
+
+A summary of the main notation used in the operator analysis of the
+following sections is provided in Table~\ref{tab:notations}.
+
+
+\begin{table}[!h]
+\centering
+\caption{Terms used in Operator Analysis}
+\label{tab:notations}
+\begin{small}
+\begin{tabular}{p{1.6cm}p{6.2cm}}
+\toprule  
+\textbf{Term} & \textbf{Description}\\ 
+\midrule
+\textbf{$K$} & DRAM Associativity\\
+\textbf{$D$} & Effective DRAM size\\
+\textbf{$t_r$} & Read Latency\\
+\textbf{$t_w$} & Write Latency\\
+\textbf{$\lambda = \frac{t_w}{t_r}$} & Ratio of Write to Read latency \\
+\textbf{$P$} & Pointer size\\
+\textbf{$N_R, N_S$} & Row cardinality of relations R and S, respectively\\
+\textbf{$L_R, L_S$} & Tuple size of relations R and S, respectively\\
+\textbf{$B$} & Buckets in hash table\\
+\textbf{$size_{entry}$} & Size of each hash table entry\\
+\textbf{$J,G$} & Count of tuples coming out of join and group-by, respectively\\
+\textbf{$size_{hj},size_{g}$} & Size of tuples coming out of join and group-by, respectively\\
+\bottomrule
+\end{tabular}
+\end{small}
+\end{table}

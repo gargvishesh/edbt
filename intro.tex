@@ -1,0 +1,163 @@
+\section{Introduction}
+\label{sec:intro}
+%
+Phase Change Memory (PCM) is a recently developed non-volatile memory
+technology, constructed from chalcogenide glass, that stores data by
+switching between crystalline and amorphous states. Broadly speaking,
+it is expected to provide an attractive combination of the best features
+of conventional disks (persistence, capacity) and of DRAM (access speed,
+data bandwidth). For instance, it is about 2 to 4 times denser than DRAM,
+while providing a DRAM-comparable read latency.  On the other hand,
+it consumes much lesser energy than magnetic hard disks while providing
+substantively larger data bandwidths. Due to this suite of  desirable
+features, PCM technology is expected to play a prominent role in the next
+generation of computing systems, either augmenting or replacing current
+components in the memory hierarchy~\cite{qureshi,zhou,lee}.
+
+A limitation of PCM, however, is that there is a significant difference
+between read and write behaviours in terms of energy, latency and
+bandwidth. A PCM write, for example, consumes 6 times more energy than
+a read. Moreover, PCM has limited write endurance in that a memory
+cell becomes unusable after the number of writes to the cell exceed
+a threshold determined by the underlying glass material.  Due to these
+constraints, PCM-based applications need to be redesigned to minimize
+both the number of writes and the skew in their distribution across the
+memory cells.  Consequently, there has been recent research activity in
+the database community to devise new implementations of the core database
+operators that are adapted to the idiosyncrasies of the PCM environment
+(e.g.~\cite{chen,viglas}).
+
+\subsection*{Architectural Model}
+The prior work has primarily focused on computing architectures wherein either
+(a) PCM completely
+replaces the DRAM memory (\modelPcmRam{}), or (b) PCM and DRAM co-exist side by side and
+are independently controllable by the software (\modelExplicit{}).  However, a third option
+that is finding favor in the architecture community is wherein the PCM is augmented with a
+small hardware managed DRAM buffer (\model{}) \cite{qureshi}. In this model, the address
+space of the application maps to PCM and the DRAM buffer can simply be
+visualized as yet another level of the existing cache hierarchy.
+For ease of comparison, these various configurations are pictorially
+shown in Figure \ref{fig:pcm_models}.
+
+\begin{figure}[htbp]
+	\includegraphics[height=50mm]{PCM_Models.png}\centering
+	\caption{PCM-based Architectural Options}
+	\label{fig:pcm_models}
+\end{figure}
+ 
+There are several practical advantages of the \model{}
+configuration: First,
+the write latency drawback of \modelPcmRam{} can be largely concealed by the intermediate DRAM
+buffer \cite{qureshi}. Second, the existing applications can be used \textit{as is} and yet manage to take advantage of both the DRAM and the PCM. This is in stark contrast to the \modelExplicit{} model which requires putting additional machinery in place either in the program, or in the OS, in order to distinguish between data mapped to DRAM and the PCM; one such way being having separate address space mappings for both of them.
+
+\subsection*{Our Work}
+In this paper, we investigate the design and evaluation of query execution engines for the \model{} model. Specifically, we propose novel PCM-conscious
+implementations of the ``workhorse'' database operators: \textit{sort},
+\textit{hash join} and \textit{group-by} that reduce both query writes and response times.  Further, we provide theoretical
+estimates on the number of writes incurred by these techniques.
+
+Then, we incorporate the proposed techniques in Multi2sim \cite{multi2sim},
+a state-of-the-art architectural simulator, and evaluate the performance
+on \emph{complete} TPC-H benchmark queries -- this is a noteworthy point since
+earlier studies of PCM databases considered operator performance only
+in isolation. However, it is possible that optimizing a specific operator
+may be detrimental to other downstream operators that follow it in the query
+execution plan. For instance, the proposal in ~\cite{chen} to keep nodes unsorted in
+B$^+$ indexes, while saving on writes, can be detrimental
+to the running times of subsequent operators, e.g. join filters, that 
+leverage index ordering.
+
+The experimental results suggest that our new operator implementations
+collectively offer considerable benefits with regard to writes -- the number being brought
+down by upto one-fourth.
+Moreover, it is not just the long-term statistics that are improved --
+the query response times are also brought down substantively.  Overall,
+these outcomes augur well for the impending migration of database engines to PCM-based computing platforms.
+
+Table \ref{tab:tab_pcm_char} shows the characteristics of PCM as compared to DRAM and HDD.
+                                                                                                          
+\begin{table}[!h]                                                                                       
+\centering                                                                                              
+                                                                                                          
+                                                                                                          
+\caption{Comparison of memory technologies \cite{qureshi}, \cite{lee}, \cite{numonyx}, \cite{chen}}
+  \label{tab:tab_pcm_char}                                                                                
+  %\centering                                                                                             
+  \begin{small}                                                                                           
+  \begin{tabular}{p{2.3cm}p{1.5cm}p{1.7cm}p{1.7cm}}
+  \toprule                                                                                                
+  
+    &  \textbf{DRAM} & \textbf{PCM} &  \textbf{HDD} \\
+  \midrule                                                                                                
+  
+  \textbf{Read energy} & 0.8 J/GB & 1 J/GB  & 65 J/GB \\ 
+  
+  \textbf{Write energy} & 1.2 J/GB & 6 J/GB  & 65 J/GB \\   
+  
+  \textbf{Idle power} & $\sim$100 mW/GB & $\sim$1 mW/GB  & $\sim$10 W/TB \\ 
+  
+  \textbf{Endurance} & $\infty$ & $10^6 - 10^8$  & $\infty$ \\                                            
+  
+  \textbf{Page size} & 64B & 64B  & 512B \\                                                               
+  
+  \textbf{Page read latency}& 20-50ns & $\sim 50ns$  & $\sim 5ms$ \\  
+  
+  \textbf{Page write latency} & 20-50$ns$ & $\sim 1 \mu$s  & $\sim5ms$ \\                                 
+  
+  \textbf{Write bandwidth}  & $\sim$GB/s per die & 50-100 MB/s per die  & $\sim$200 MB/s per drive \\ 
+  
+  \textbf{Density} & $1\times$ & 2-4$\times$ & N/A \\                                                     
+  
+  \bottomrule                                                                                             
+  \end{tabular}                                                                                           
+  \end{small}                                                                                             
+  \end{table}                        
+
+\subsection*{Organization}
+The remainder of this paper is organized as follows: We define the problem
+framework in Section~\ref{assumptions}. The design of the new PCM-conscious
+database operators, and their theoretical analysis, are presented in
+Sections~\ref{sort}, \ref{hj} and \ref{gby}.
+Our experimental framework and the simulation results are reported
+in Sections~\ref{sec:exp} and \ref{sec:results}.  The related literature is reviewed in
+Section~\ref{relWork}.  Finally, Section~\ref{conclusion} summarizes
+our conclusions and outlines future research avenues.
+
+\begin{comment}
+
+
+In the recent years, chip manufacturers have come up with new
+PCM prototypes and products \cite{samsung}, \cite{micron}, \cite{ibm}
+signalling the advent of PCM based systems. This indicates that the
+transition of database systems to a PCM inclusive hardware is indeed
+imminent. Thus, it is imperative for databases to be geared up for this
+transition if they are to utilize PCM to the fullest potential.
+
+
+There are multiple possible manners in which PCM can be incorporated in the memory hierarchy. For instance, PCM might replace the disk as the secondary storage. Or it might replace the DRAM as the primary memory. Many such diverse configurations already exist in the literature \cite{qureshi}, \cite{lee}, \cite{condit}, \cite{viglas}. Given the choice of the model heavily impacts the query execution algorithm design choices for database systems, the need for identifying the most potent candidate for future PCM configuration is indispensable. Otherwise, all the efforts to come up with the right algorithm design may prove to be futile. 
+
+
+Once the system model is decided upon, the next step is designing suitable query execution algorithms for the corresponding model. Prior works in this area targeted individual operators without considering the their effect on entire query execution. However, in some cases, optimising one operator can be detrimental to the operators that follow it in the plan tree. Keeping the nodes unsorted in a B$^+$-tree \cite{chen}, for instance, can be helpful in saving the writes incurred in maintaining the B$^+$-tree. However, they can be detrimental for the operators using it during their execution. Similarly, using a custom join algorithm \cite{viglas} in place of merge-join can upset the order essential for efficient execution of the next operator. Hence, it is important for us to evaluate the algorithms from a full query standpoint rather than just an independent one.
+
+Algorithm design for database query execution in a PCM environment represents a departure from the conventional design principles based on symmetric read and write behaviours. For instance, the inherent properties of PCM expose a glaring performance gap between reads and writes, which can be exploited to our advantage by trading writes for reads. Current query execution, being rooted in symmetric I/O assumption, can be grossly sub-optimal in this new paradigm. Thus, PCM compliant query execution calls for a transformation in the hitherto established perspective on algorithm design.
+
+There has been similar research undertaken earlier for database query execution on flash disks \cite{graefe}. However, PCM differs from flash in some key aspects. Firstly, flash supports block addressability whereas PCM is byte addressable. Secondly, the read latency gap between  Flash and DRAM is quite large (32X) whereas the read latencies of PCM and DRAM are almost comparable. These differences deem Flash suitable techniques sub-optimal for PCM. Thus, the right way to go forward would be to devise a separate customized set of algorithms for query execution on PCM.
+
+\subsection*{Contributions}
+In this work, we address end-to-end query execution for a PCM based memory architecture. In particular, we make the following contributions :
+
+\begin{itemize}
+\item We justify our choice of system model from the existing models.
+\item We propose PCM conscious algorithms for \textit{sort}, \textit{hash join} and \textit{group-by}, which constitute the ``workhorse" operators of database systems, in the context of end-to-end query execution.
+
+\item We make modifications to a state-of-the-art architectural simulator Multi2sim\cite{multi2sim} to add PCM support in the memory hierarchy.
+
+\item We test our proposed algorithms on TPC-H benchmark queries using the modified simulator. Our results show significant improvements both in running time and writes as compared to existing algorithms.
+
+%\item Subsequently, we introduce the notations in Section \ref{notations} used in our proposed algorithms for Sort, Hash Join and Group By operators in Sections \ref{sort}, \ref{hj} and \ref{gby} respectively.
+%\item Following that, we present the simulator changes we made to test our algorithms in Section \ref{sim}. This modified simulator is used to test full TPC-H benchmark queries in Section \ref{exp}.
+%\item The results and discussion follow in Section \ref{results}.
+\end{itemize}
+%Finally, Section \ref{alg:multi_pivot_pcm_partition}{relWork} covers Related Work in the area, both from architecture and database algorithms perspective. The paper concludes by exploring the future work in this area in Section \ref{conclusion}.
+ 
+\end{comment}

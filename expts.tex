@@ -1,4 +1,6 @@
 \section{Simulation Testbed}
+This section details our experimental settings in terms of the hardware settings, the benchmark queries used as well as the performance metrics on which we evaluated the algorithms.
+
 \label{sec:exp}
 \subsection{Architectural Platform}
 Since PCM memory is as yet not commercially available, we
@@ -10,14 +12,14 @@ the OS stack.} simulator that can model a multithreaded, multicore,
 superscalar x86 CPU and an AMD Evergreen GPU. It has support for both
 functional simulation and cycle-accurate detailed architecture simulation.
 
-Since Multi2sim does not have native support for PCM, we modified its
-existing DRAM module to mimic PCM behavior.  A separate architecture
+Since Multi2sim does not have native support for PCM, we made a major extension to its existing memory module to model PCM memory. A separate architecture
 controlled DRAM buffer was included as an additional level in the memory
-hierarchy, specifically between the L2 cache and the PCM. The DRAM was
-simulated as a set associative write-back memory with \textit{N-Chance}
-as the eviction policy. As recommended in \cite{nchance}, $N$ was set
+hierarchy, specifically between the L2 cache and the PCM. We added additional capabilities in the simulator so that the simulated program could ask the simulator to dump intermediate statistics, to know individual operators performance for instance. 
+
+The DRAM was simulated as a set associative write-back memory with \textit{N-Chance}
+as the eviction policy. As mentioned in \cite{nchance}, $N$ was set
 to $\frac{n}{2}$, where $n$ is the cache associativity, since this
-setting provides good performance on multiple metrics -- writes, energy
+setting was found to provide good performance on multiple metrics -- writes, energy
 and latency.  Finally, the timing simulation was modified to account
 for the asymmetric read and write latencies of PCM.
 
@@ -27,7 +29,7 @@ Since our experiments consider J
 In our experiments, we have used $n$ to be 8, therefore making $N$ to be 4.
 \end{comment}
 
-Like most other architectural simulators, Multi2Sim does not
+Like most other architectural simulators, Multi2sim does not
 explicitly track the data residing at the different levels of the
 memory hierarchy. It instead maintains only a single buffer that
 indicates the latest data, as visible to the simulated program, for
@@ -65,11 +67,12 @@ these results are also presented here.
 
 \begin{center}
 \begin{table}[htbp]
+\begin{small}
 \caption{Experimental Setup}
 \label{table:setup}
-\begin{tabular}{p{3.0cm}p{5.0cm}}
+\begin{tabular}{p{2.5cm}p{5.2cm}}
 \toprule
-Simulator & Multi2Sim-4.2 with added support for PCM\\ \hline
+Simulator & Multi2sim-4.2 with added support for PCM\\ \hline
 
 L1D cache (private) & 32KB, 64B line, 4-way set-associative, 4 cycle latency, write-back, LRU replacement policy\\ \hline
 L1I cache (private) & 32KB, 64B line, 4-way set-associative, 4 cycle latency, write-back, LRU replacement policy\\ \hline   
@@ -80,9 +83,9 @@ DRAM buffer (private) & 4MB, 256B line, 8-way set-associative, 200 cycle latency
 Main Memory & 2 GB PCM, 4KB page, 1024 cycle read latency (per 256B line), 64 cycle write latency (per 4B modified word)\\
 \bottomrule
 \end{tabular}
+\end{small}
 \end{table}
 \end{center}
-
 
 \subsection{Database and Queries}
 %We used TPC-H (version 2.16.0) 1GB PCM-resident database for our experiments.
@@ -111,7 +114,7 @@ cover a diverse spectrum of the experimental space, are presented here.
 For each of the queries, we first identified the query execution plan
 recommended by the PostgreSQL query optimizer with the native operators,
 and then forcibly used the same execution plan for their PCM-conscious
-replacements as well. The SQL queries are show in Figure~\ref{fig:queries}. The specific plans used for these three queries
+replacements as well. This was done in order to maintain fairness in the comparison of the PCM-oblivious and PCM-conscious algorithms, though it is possible that a better plan is available. The SQL queries are shown in Figure~\ref{fig:queries}. The specific plans used for these three queries
 are shown in Figure~\ref{fig:plan_trees}.
 
    \lstset{width=\textwidth,
@@ -204,16 +207,16 @@ or
 
 
 \subsection{Performance Metrics}
-With regard to performance metrics, the number of PCM writes and the
-running times (in terms of processor cycles) was measured for each of the
-operators invoked during the query execution.  To enhance the accuracy
-in the calculation of these metrics, a separate DRAM flushing routine
-was inserted after the completion of each operator. This routine went
-through the entire DRAM buffer, flushing out the previous entries,
-leading to the number of writes being correctly estimated since all
-dirty entries are evicted.
+We measured the following performance metrics for each of the queries:
+\begin{itemize}
+\item number of PCM writes
+\item running times (in terms of processor cycles)
+\item wear distribution
+\end{itemize}
+In addition, we measured writes and cycles for each of the
+operators invoked during the query execution.
 
-\begin{figure*}
+\begin{figure*}[htpb]
 \centering
 \subfloat[Q13]{
 \begin{tikzpicture}[scale=.9, transform shape]
@@ -323,7 +326,7 @@ dirty entries are evicted.
 
 We conducted experiments based on the above framework and present
 their results in this section. In particular, the PCM Writes and CPU Cycles results of the native
-and PCM-conscious executions for Q13, Q15 and Q19 are shown in
+and PCM-conscious executions for Q13, Q16 and Q19 are shown in
 Figures~\ref{fig:overall_results_q13}, \ref{fig:overall_results_q16}
 and \ref{fig:overall_results_q19}, respectively.
 In each of these figures, we provide both the total and the break-ups
@@ -338,8 +341,8 @@ Focusing our attention first on Q13 in
 Figure~\ref{fig:overall_results_q13}, we find that the bulk of the
 overall Writes and Cycles are consumed by the Sort operator. Comparing
 the performance of the Native (blue bar) and PCM-conscious (green bar)
-implementations, we observe a very significant savings (57\%) on Writes,
-and an appreciable decrease (22\%) on Cycles.
+implementations, we observe a very significant savings (53\%) on Writes,
+and an appreciable decrease (20\%) on Cycles.
 
 \begin{figure}[htbp]
 	\centering
@@ -366,7 +369,7 @@ Cycles behavior. Again, there are substantial savings in both Writes
 In case of Q13, the running time and writes for the sort operator formed
 the bulk of the writes and time taken for the entire query. The group-by
 operator comparatively incurred negligible writes and running time. Writes
-savings of 84\% and running time savings of 42\% were observed for the
+savings of 53\% and running time savings of 20\% were observed for the
 execution of Q13 (shown in sub-figures (a) and (b) resp.) as compared
 to native; fuelled mainly by the sort operator.
 \end{comment}
@@ -408,9 +411,9 @@ the majority of the writes and time. We observed a savings of about
 70\% in writes and 20\% in running time. The size of orders table was
 216M. 
 \end{comment}
-For Q13, we observed savings of $84\%$ in writes and $42\%$ in cycles. The PCM-conscious version used multi-pivot sort algorithm and incurred writes of $1.36 \times 10^6$ words $= 5.44 \times 10^6 $ bytes. The size of the $orders$ table was approximately $2.14 \times 10^6$. Replacing this value for $N_R L_R$ in Equation \ref{eq:mpivot}, we get the writes as $$W_{mpivot}(bytes) \approx 2 \times 2.14 \times 10^6  = 4.28 \times 10^6 $$ which is close to the observed writes.
+For Q13, we observed savings of $53\%$ in writes and $20\%$ in cycles. 
 
-In the case of Q16, however, the data at the sorting stage was found to be
+In the case of Q16, the data at the sorting stage was found to be
 much lesser than the DRAM size. Hence, both the native and PCM-conscious
 executions used the native sort routine, and as a result, the cycles
 and writes for both implementations match exactly.
@@ -431,7 +434,7 @@ with Q19  -- 65\% Writes and 32\% Cycles in Figure~\ref{fig:overall_results_q19}
 was the 3 bytes of writes saved due to single-byte hash values,
 in addition to the page-based aggregation of hash table entries.
 
-Using Equation \ref{eq:ht_pcm} for the estimated writes in Q19 for our PCM-conscious version of Hash Join and replacing the values of $N_R$, $size_{entry}$, $J$, $size_{hj}$ to be $2 \times 10^5$, $8$, $120$ and $8$, respectively, corresponding to Q16 at that stage, the writes are given by $$W_{ht\_pcm}(bytes) = 2 \times 10^5 (8-3) + 120 \times 8 \approx 10^6$$ which is close to the obtained writes of $0.32 \times 10^6$ words $= 1.28 \times 10^6$ bytes.
+
 \subsubsection{Group By}
 
 In Q16, the aggregate operator in the group-by has
@@ -442,10 +445,7 @@ through pointers, thereby reducing the writes significantly. Consequently,
 we obtain savings of $74\%$ in Writes and $20\%$ in Cycles, as shown in
 Figure~\ref{fig:overall_results_q16}.
 
-Equation \ref{eq:gby_ptr_hash} for write estimation in Pointer based hashed grouping algorithm depends upon $N_R$, $P$, $G$ and $size_g$. The values of these parameters for Q16 was $119056$, $4$, $18341$ and $48$ respectively. Replacing these values in the equation gives us 
-$$W_{gb\_ptr\_hash}(bytes) = 2N_R \times P + G \times size_g$$
-$$= 2 \times 119056\times 4 + 18341 \times 48$$ 
-$$ = 1.83 \times 10^6$$ This closely corresponds to the observed writes of $0.36 \times 10^6$ words $= 1.44 \times 10^6$ bytes. 
+ 
 
 When we consider Q13, however, the hash table consisted of very few entries. The lesser number of entries led to the overhead of page metadata itself overshadowing the savings obtained in other aspects. Specifically, improvements of
 about 4\% and 1\% were obtained for Writes and Cycles, as shown in
@@ -543,9 +543,8 @@ To model this scenario, we experiment with DRAM sizes of 512 KB, 1 MB and
 2 MB. Note that, for each of these cases, all the algorithms continue to assume 4 MB as the available DRAM size, oblivious to the actual reduction in the availability of DRAM, and hence continue to execute accordingly. The results are shown in Figures~\ref{fig:sort}, \ref{fig:join}
 and \ref{fig:gby} for the Sort, Hash Join and Group By operators, respectively.
 
-\subsubsection{Sort}
 In Figure~\ref{fig:sort}, we observe that the Sort operator provides average savings
-for Q13 of about 50\% in Writes and 20\% in Cycles.
+for Q13 of about 47\% in Writes and 20\% in Cycles.
 
 \begin{figure}[h]
 	\centering
@@ -561,14 +560,6 @@ for Q13 of about 50\% in Writes and 20\% in Cycles.
 
 %\subsubsection{Sort}
 
-\begin{comment}
-We omit sorting results for Q16. This is because our algorithm, being
-oblivious to the change in the underlying DRAM size, chose to use the
-native version of sort for all DRAM sizes since the data size was lesser
-than the original DRAM size of 4MB.
-\end{comment}
-
-\subsubsection{Hash Join}
 \begin{figure}[h]
 	\centering
 	\subfloat[Q16]{	
@@ -582,16 +573,9 @@ than the original DRAM size of 4MB.
 	\label{fig:join}
 \end{figure}
 In case of Q16, the hash join operator rendered $17\%$ improvement in
-writes and $50\%$ in running time.
-
-The hash join in Q19 continued to benefit with savings of about $42\%$ in writes and again $50\%$
+writes and $50\%$ in running time. The hash join in Q19 continued to benefit with savings of about $42\%$ in writes and again $50\%$
 in running time.
 
-\begin{comment}
-Not clear as to why the change in DRAM Size did not have any impact.
-\end{comment}
-
-\subsubsection{Group By} 
 \begin{figure}[htbp]
 \centering
 \subfloat[Q13]{
@@ -605,13 +589,12 @@ Not clear as to why the change in DRAM Size did not have any impact.
 \caption{Group By}
 \label{fig:gby}
 \end{figure}
-The hash table being much smaller than all DRAM variants for Q13, the
+For the group-by operator in Q16, writes savings of $78\%$ and running time savings of $26\%$
+were observed for the group-by operator. The hash table for group-by being much smaller than all DRAM variants for Q13, the
 change in the DRAM size didn't reflect much of a change in writes and
 running time - yielding the same average of 4\% and 1\% for the two
 metrics respectively.
 
-For Q16, writes savings of $70\%$ and running time savings of $7\%$
-were observed for the group-by operator.
 
 Thus, we can conclude that the savings obtained by our algorithms are
 not restricted to the environment where the DRAM is exclusively available
@@ -619,39 +602,51 @@ to one process. Instead, our algorithms can handle the unpredictability
 in the DRAM availability due to multiple running processes equally well,
 thereby being sufficiently robust to volatile system behaviour.
 
+\subsection{Validating Write Estimators}
+\label{validation}
+\subsubsection{Sort}
 
-\subsection{Writes-Time Trade-off}
-\label{tradeoff}
-\begin{figure}[htbp]
-	\centering
- 	\includegraphics[height=29mm]{join_algos.png}
-	\caption{Writes-Time trade-off in PCM algorithm design}
-	\label{fig:join_algos}
-\end{figure}
-In this section, we present a sample query that characterizes the trade-off between writes and cycle time that in the design of algorithms for various operators. In the case of join operator, one such trade-off is observed in nested loops join and hash join. Consider, for example, the following modified TPC-H Query 16 :
-\begin{verbatim}
-select 
-     p_brand, p_type, p_size,
-     count(distinct ps_suppkey) 
-     	as supplier_cnt
-from 
-     partsupp, part
-where 
-     p_partkey = ps_partkey
-     and p_brand <> 'Brand#35'
-     and p_type like 'ECONOMY BURNISHED%'
-     and p_size in 
-     	(14, 7, 21, 24, 35, 33, 2, 20)
-     and ps_suppkey > 9950
-group by 
-     p_brand, p_type, p_size
-order by 
-     supplier_cnt desc, p_brand, 
-     	p_type, p_size;
-\end{verbatim}
-We alternatingly used nested loops join and hash join to perform the join between $partsupp$ and $part$ tables. Figure \ref{fig:join_algos} presents the results for the two plans. Using nested loops join saves $65\%$ on writes as compared to hash join. On the other hand, hash join consumes a whopping $98\%$ lesser cycles than nested loops join by avoiding repeated iterations over the entire right table for every left table tuple. 
+The size of the $orders$ table was approximately $214 \times 10^6$. The conventional quicksort algorithm for Q13 incurred writes of $233.6 \times 10^6$ words $= 934.4 \times 10^6 $bytes. Using Equation \ref{eq:sort_conv}, the expected number of writes were: \\
+\begin{dmath}
+W_{sort\_conv}(bytes) = N_RL_R (0.5 \lceil log_2(\frac{N_R L_R}{D}) \rceil + 1) \\
+= 214 \times 10^6 (0.5 \lceil log_2(\frac{214 \times 10^6}{4 * 10^6}) \rceil + 1) \approx 829.3 \times 10^6 
+\end{dmath}
+\\
+The PCM-conscious version used multi-pivot sort algorithm and incurred writes of $110.6 \times 10^6$ words $= 441.8 \times 10^6 $ bytes. Replacing the values for $N_R L_R$ in Equation \ref{eq:mpivot}, we get the writes as $$W_{mpivot}(bytes) \approx 2 \times 214 \times 10^6  = 428 \times 10^6 $$
+Thus both the estimates are close to the observed writes.
 
-Hence, it is clear from the above example that future query optimizers for PCM based architecture need to incorporate these dual metrics of \emph{writes} and \emph{time} in order to decide the most suitable plan for executing a given query. 
+\subsubsection{Hash Join}
+For hash join in Q19, the values of $N_R$, $size_{entry}$, $J$, $size_{j}$ were $2 \times 10^5$, $8$, $120$ and $8$, respectively. 
+
+The observed writes for PCM-oblivious hash join were $0.90 \times 10^6$ words $= 3.6 \times 10^6$ bytes. Putting the parameter values in Equation \ref{eq:ht_conv}, we get estimated writes as: \\
+\begin{dmath}
+W_{ht\_conv}(bytes) = N_R \times (size_{entry} + P) + J \times size_{j} =  2 \times 10^5 (8+4) + 120 \times 8 \approx 2.4 \times 10^6 
+\end{dmath}
+\\
+ Using Equation \ref{eq:ht_pcm} for the estimated writes in Q19 for our PCM-conscious version of Hash Join and replacing the  parameter values, the writes are given by:  
+$$W_{ht\_pcm}(bytes) = 2 \times 10^5 (8-3) + 120 \times 8 \approx 10^6$$ which is close to the obtained writes of $0.32 \times 10^6$ words $= 1.28 \times 10^6$ bytes.
+
+\subsubsection{Group-By}
+The values of the parameters $N_R$, $L_R$, $P$, $G$ and $size_g$ for Q16 were $119056$, $48$, $4$, $18341$ and $48$ respectively.
+The observed writes for group-by for PCM-oblivious algorithm were $1.36 \times 10^6$ words $= 5.44 \times 10^6$ bytes. Using Equation \ref{eq:gby_conv_sort} and replacing the parameter values, we get:
+\\
+\begin{dmath}
+W_{gb\_conv\_sort}(bytes) = N_RL_R (0.5 \lceil log_2(\frac{N_R L_R}{D}) \rceil + 1) + G \times size_g = 119056 \times 48  (0.5 \lceil log_2(\frac{119056 \times 48}{4 \times 10^6}) \rceil + 1) + 18341 \times 48
+\approx 8 \times 10^6
+\end{dmath}
+\\
+Using Equation \ref{eq:gby_ptr_hash} for write estimation in pointer based hashed grouping algorithm gives us:
+\\
+\begin{dmath}
+W_{gb\_ptr\_hash}(bytes) = 2N_R \times P + G \times size_g
+= 2 \times 119056\times 4 + 18341 \times 48
+= 1.83 \times 10^6 
+\end{dmath}
+\\
+This closely corresponds to the observed writes of $0.36 \times 10^6$ words $= 1.44 \times 10^6$ bytes.
+
+Thus, our estimators predict writes with a reasonable degree of accuracy for both the PCM-oblivious and PCM-conscious algorithms. Thus, they can be incorporated in the query optimizer to help estimate the writes for a given query plan.
+
 \begin{comment}
 \begin{table}[!h]
 \centering
@@ -671,4 +666,41 @@ Viglas \cite{viglas} & \textit {DRAM\_EXPLICIT} & Sort, Join & Analysis of a sub
 \end{tabular}
 \end{small}
 \end{table} 
-\end{comment}
+
+\begin{table}[!h]                                                                                       
+\centering                                                                                              
+                                                                                                          
+                                                                                                          
+\caption{Validation of write estimators}
+  \label{tab:tab_writes}                                                                                
+  %\centering                                                                                             
+  \begin{small}                                                                                           
+  \begin{tabular}{p{2.25cm}p{1.4cm}p{1.6cm}p{1.6cm}}
+  \toprule                                                                                                
+  
+  \textbf{Operator} & \textbf{Equation} & \textbf{Parameter Values} & \textbf{Esimated Writes} & \textbf{Observed Writes}\\
+  \midrule                                                                                                
+  
+  \textbf{Sort PCM-Oblivious} & Equation \ref{eq:sort_conv} \\ 
+  
+  \textbf{Write energy} & 1.2 J/GB & 6 J/GB  & 65 J/GB \\   
+  
+  \textbf{Idle power} & $\sim$100 mW/GB & $\sim$1 mW/GB  & $\sim$10 W/TB \\ 
+  
+  \textbf{Endurance} & $\infty$ & $10^6 - 10^8$  & $\infty$ \\                                            
+  
+  \textbf{Page size} & 64B & 64B  & 512B \\                                                               
+  
+  \textbf{Page read latency}& 20-50ns & $\sim 50ns$  & $\sim 5ms$ \\  
+  
+  \textbf{Page write latency} & 20-50$ns$ & $\sim 1 \mu$s  & $\sim5ms$ \\                                 
+  
+  \textbf{Write bandwidth}  & $\sim$GB/s per die & 50-100 MB/s per die  & $\sim$200 MB/s per drive \\ 
+  
+  \textbf{Density} & $1\times$ & 2-4$\times$ & N/A \\                                                     
+  
+  \bottomrule                                                                                             
+  \end{tabular}                                                                                           
+  \end{small}                                                                                             
+  \end{table} 
+  \end{comment}

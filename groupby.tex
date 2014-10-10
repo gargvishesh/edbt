@@ -4,33 +4,33 @@
 Well known techniques for group-by include \textit{sorting} and \textit{hashing}. The technique used depends both on the constraints mentioned in the operator expression itself as well as on the operator following later in the plan tree.
 
 
-Sorting is used for group-by when an operator such as \textit{order by} appears later in the plan tree. Another use case for sorting based group-by is for queries with \textit{distinct} clause within the aggregation expression. A sample case in point is the following SQL query:
+Sorting is used for group-by when an operator such as \textit{order by} appears later in the plan tree. Another use case for sorting based group-by is for queries with \textit{distinct} clause within the aggregation expression, since the existence of duplicates needs to be checked in parallel. A sample case in point is the following SQL query:
 \begin{verbatim}
 	select o.customer, count(distinct(o.orderID))
 	from orders as o 
 	group by o.customer
 \end{verbatim}
 
-
+\begin{comment}
 In such a case, we can now no longer simply update the aggregate values in the hash table for group-by since the existence of duplicates needs to be checked in parallel. To get past this limitation, query optimisers usually choose to use sorting for aggregation. Since the group of tuples forming each aggregate now reside contiguously in the sorted list, duplicates can be identified easily and eliminated, while performing the aggregation.
+\end{comment}
 
 In the rest of the cases, it is hashing which is the method of choice by virtue of having lesser time complexity in comparison to sorting; the hash table construction being close to that of hash join but with a few differences.
 
-In the following subsections, we start with the conventional group-by operator based on sorting and hashing and later present techniques to achieve a reduction in the writes. We assume that there are $G$ groups in the relation with $size_g$ as the size of each output aggregate tuple. For hash based group-by, $size_{agg\_field}$ represents the size of the aggregate field during grouping and $size_{entry}$ is the hash table entry size for each tuple. The additional writes $G \ times size_g$ of writing out the aggregate tuples themselves after finishing with sorting/hashing  is common to all the techniques presented.
+In the following subsections, we start with the conventional group-by operator based on sorting and hashing and later present separate techniques to achieve a reduction in the writes for these different group-by algorithms. For hash based group-by, $size_{agg\_field}$ represents the size of the aggregate field during grouping and $size_{entry}$ is the hash table entry size for each tuple. The additional writes $G \times size_g$ of writing out the aggregate tuples themselves after finishing with sorting/hashing  is common to all the techniques presented.
 
 \subsection{Conventional group-by}
 
 
 A hash table entry for group-by, as compared to hash table entry in hash join, is accompanied by an additional field of aggregate value. For each new tuple in the input array, a bucket index is obtained after hashing the value(s) of the column(s) featuring in the group-by expression. Subsequently, a search is made in the bucket indicated by the index. If a tuple matching in the group-by column(s) value is found, the aggregate field value is updated; else, a new entry is created in the bucket. Thus, unlike hash join where each smaller relation tuple has an entry of its own, the grouped tuples share a common entry with an aggregate field that usually keeps getting updated over the course of the algorithm.
 
-\textbf{PCM write analysis}: For sort based grouping, the writes would be akin to those incurred for sorting. If there are $0.33nln(n)$ \cite{swaps} swaps and each such intermediate swapped pair gets evicted, there will be $2 \times 0.33nln(n)$ writes. Thus, the total writes in our case would be:
+\textbf{PCM write analysis}: For sort based grouping, the writes would be akin to those incurred for sorting. Thus, following the same analysis as in Equation \ref{eq:sort_conv}, the total writes would be:
 \begin{equation}
 \label{eq:gby_conv_sort}
-W_{gb\_conv\_sort} = 0.66 N_R L_R ln(N_R) + G \times size_g
+W_{gb\_conv\_sort} = N_RL_R (0.5 \lceil log_2(\frac{N_R L_R}{D}) \rceil + 1) + G \times size_g
 \end{equation}	
 
 In hash table based group-by, the number of separate entries in the hash table would be $G$, incurring $G \times size_{entry}$ writes. The writes due to updation on the other hand would be $N_R \times size_{agg\_field}$ assuming each intermediate update gets evicted. This would give a total writes of:
-
 \begin{equation}
 \label{eq:gby_conv_ht}
 \begin{split}
@@ -39,18 +39,17 @@ N_R \times size_{agg\_field} + G \times size_g
 \end{split}
 \end{equation}
 
-\subsection{Pointer based multi-pivot quicksort grouping}
+\subsection{Pointer based MPQS group-by for ordered grouping}
 \label{subsec:gb_ptr_mpivot} 
 Sorting based group-by, as against the sorting operator itself, differs in a key aspect that the sorted tuples themselves are not required to be written out. Instead, it is the aggregated tuples that are finally passed on to the next operator in the plan tree. Hence, in the modified multi-pivot quicksort of Section~\ref{subsec:sort_mpivot}, we use pointers in both the \textit{Swap} and the \textit{Sort} phases and later use those pointers to perform aggregation on the sorted tuples. Thus pointer based multi-pivot quicksort incurs lesser writes than multi-pass multi-pivot quicksort, since the full tuples writes in the latter are replaced by pointer writes in this algorithm.
 
 \textbf{PCM write analysis}: The full tuple writes of $2 N_R L_R$ which were incurred in the original multi-pivot quicksort scheme will now be replaced by by $2N_R \times P$ since pointers are used during both partitioning and sorting phases. Thus, the total writes for this algorithm would be given by:
-
 \begin{equation}
 \label{eq:gby_ptr_mpivot}
 W_{gb\_ptr\_mpivot} = 2N_R \times P + G \times size_g
 \end{equation}
 
-\subsection{Pointer based hashed grouping}
+\subsection{Pointer based hashed group-by for unordered grouping with distinct clause}
 
 For group-by with \textit{distinct} clause scenarios, we could use the same sorting algorithm as in Section \ref{subsec:gb_ptr_mpivot}. However, in this case, the entire array need not be sorted, which means dividing the array on the basis of pivots can be dropped. In the modified algorithm for group-by, we instead use hashing as the means to divide the input tuples into DRAM sized partitions. These partitions are then sorted by means of pointers, just as in the pointer based multi-pivot algorithm. Though this methodology doesn't reduce the writes from the original pivot based partitioning, it helps bring down the time complexity of moving the tuples to the right partitions. This is because now, we need not perform a binary search within the sorted list of pivots to find out in which range the tuple's join column value belongs. Instead, a direct hash of the join column value can determine the correct partition for the tuple. The modified partitioning pseudo-code is shown in Algorithm \ref{alg:hash_based_pcm_partition}.
 
@@ -84,9 +83,8 @@ As we can see, hash based partitioning brings down the time complexity of both t
 W_{gb\_ptr\_hash} = 2N_R \times P + G \times size_g
 \end{equation}
 
-\subsection{Hash table based group-by}
+\subsection{Hash table based group-by for unordered grouping}
 The hash table for group-by is identical to the hash table for hash join apart from an additional aggregate field. Thus, we can apply the same optimizations as we do in hash join in order to reduce the writes during hash table construction. Consequently, the total writes incurred for the optimized hash table case would be given by
-
 \begin{equation}
 \begin{split}
 W_{gb\_opt\_ht} = G \times (size_{entry} - 3) + \\
